@@ -1,6 +1,7 @@
 const puppeteer = require("puppeteer-extra");
 const dotenv = require("dotenv");
 const path = require("path");
+const fs = require("fs");
 dotenv.config();
 const doc_viz = process.env.DOC_VIZ;
 const login = process.env.LOGIN;
@@ -27,7 +28,7 @@ async function openWebPage() {
     const browser = await puppeteer.launch({
       headless: false,
       // devtools: true,
-      slowMo: 50,
+      slowMo: 25,
     });
 
     const page = await browser.newPage();
@@ -43,7 +44,7 @@ async function openWebPage() {
 
     await page.close();
 
-    for (let i = 1; i <= 1551; i++) {
+    for (let i = 488; i <= 2000; i++) {
       const vizPage = await browser.newPage();
       await vizPage.setDefaultNavigationTimeout(0);
       const visitUrl = `${doc_viz}${i}`;
@@ -52,7 +53,6 @@ async function openWebPage() {
       const title = await vizPage.evaluate(() => {
         const title = document.querySelector(".class_nombre");
         if (!title) {
-          return null;
         } else {
           return title.innerText;
         }
@@ -60,13 +60,43 @@ async function openWebPage() {
       await vizPage.evaluate(() => {
         const iframe = document.querySelector("iframe");
         if (!iframe) {
-          return null;
         } else {
           iframe.contentWindow.document.getElementById("download").click();
         }
       });
 
-      await vizPage.close();
+      await vizPage.waitForTimeout(2000);
+
+      while (
+        fs.readdirSync(dir).filter((x) => x.includes(".crdownload")).length > 0
+      ) {
+        await vizPage.waitForTimeout(5000);
+      }
+
+      const files = fs.readdirSync(dir);
+      if (files.length === 1 || !oldFiles) {
+        fs.renameSync(
+          `${dir}/${files[files.length - 1]}`,
+          `${dir}/${i}.${title.replace(/\s|\//g, "_")}.pdf`
+        );
+        var oldFiles = fs.readdirSync(dir);
+      } else if (
+        files.length === 0 ||
+        files.filter((x) => !oldFiles.includes(x)).length === 0
+      ) {
+      } else {
+        var newFiles = files.filter((x) => !oldFiles.includes(x));
+        fs.renameSync(
+          `${dir}/${newFiles[0]}`,
+          `${dir}/${i}.${title.replace(/\s|\//g, "_")}.pdf`
+        );
+        oldFiles = fs.readdirSync(dir);
+      }
+
+      const pages = await browser.pages();
+      for (let i = 2; i < pages.length; i++) {
+        await pages[i].close();
+      }
     }
 
     await browser.close();
